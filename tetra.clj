@@ -33,7 +33,7 @@
 (def or-candidates (helpers/expand-template or-template))
 
 (defn abcd [{:keys [nd r n]} x] ;; nd = and, r = or, n = not
-  [ x
+  [x
    (n x)
    (nd x (n x))
    (n (r x (n x)))])
@@ -56,7 +56,7 @@ valid-combinations
         valid-combinations)
 
 (count (filter (fn [x] (= (:results x) '([0 1 0 0] [1 0 0 0] [:p :p 1 :p] [:b :b :b 1])))
-             valid-combinations))
+               valid-combinations))
 
 (def associative-combinations
   (filter (fn [{:keys [and-candidate or-candidate]}]
@@ -90,56 +90,66 @@ valid-combinations
       (n (nd a b c d))))                    ; not all four are true
 
 (->>
-  associative-combinations
-  last
-  :results)
+ associative-combinations
+ last
+ :results)
 
-(let [last-combo (last associative-combinations)
-      evaluator (evaluator/make-evaluator (:and-candidate last-combo) 
-                                          (:or-candidate last-combo) 
-                                          not)]
-  ;; Test both one-hot encoders with different input combinations
-  {:encoder-1 [(one-hot-encoder-1 evaluator 1 0 0 0)  ; should output 1 for first position
-               (one-hot-encoder-1 evaluator 0 1 0 0)  ; should output 1 for second position  
-               (one-hot-encoder-1 evaluator 0 0 1 0)  ; should output 1 for third position
-               (one-hot-encoder-1 evaluator 0 0 0 1)  ; should output 1 for fourth position
-               (one-hot-encoder-1 evaluator 1 1 0 0)  ; what happens with multiple 1s?
-               (one-hot-encoder-1 evaluator 0 0 0 0)] ; what happens with all 0s?
-   :encoder-2 [(one-hot-encoder-2 evaluator 1 0 0 0)
-               (one-hot-encoder-2 evaluator 0 1 0 0)
-               (one-hot-encoder-2 evaluator 0 0 1 0)
-               (one-hot-encoder-2 evaluator 0 0 0 1)
-               (one-hot-encoder-2 evaluator 1 1 0 0)
-               (one-hot-encoder-2 evaluator 0 0 0 0)]
-   :encoder-3 [(one-hot-encoder-3 evaluator 1 0 0 0)
-               (one-hot-encoder-3 evaluator 0 1 0 0)
-               (one-hot-encoder-3 evaluator 0 0 1 0)
-               (one-hot-encoder-3 evaluator 0 0 0 1)
-               (one-hot-encoder-3 evaluator 1 1 0 0)
-               (one-hot-encoder-3 evaluator 0 0 0 0)]
-   :encoder-4 [(one-hot-encoder-4 evaluator 1 0 0 0)
-               (one-hot-encoder-4 evaluator 0 1 0 0)
-               (one-hot-encoder-4 evaluator 0 0 1 0)
-               (one-hot-encoder-4 evaluator 0 0 0 1)
-               (one-hot-encoder-4 evaluator 1 1 0 0)
-               (one-hot-encoder-4 evaluator 0 0 0 0)]})
+(defn test-encoders-on-combo [combo]
+  (let [evaluator (evaluator/make-evaluator (:and-candidate combo)
+                                            (:or-candidate combo)
+                                            not)]
+    {:encoder-1 [(one-hot-encoder-1 evaluator 1 0 0 0)
+                 (one-hot-encoder-1 evaluator 0 1 0 0)
+                 (one-hot-encoder-1 evaluator 0 0 1 0)
+                 (one-hot-encoder-1 evaluator 0 0 0 1)
+                 (one-hot-encoder-1 evaluator 1 1 0 0)
+                 (one-hot-encoder-1 evaluator 0 0 0 0)]
+     :encoder-2 [(one-hot-encoder-2 evaluator 1 0 0 0)
+                 (one-hot-encoder-2 evaluator 0 1 0 0)
+                 (one-hot-encoder-2 evaluator 0 0 1 0)
+                 (one-hot-encoder-2 evaluator 0 0 0 1)
+                 (one-hot-encoder-2 evaluator 1 1 0 0)
+                 (one-hot-encoder-2 evaluator 0 0 0 0)]
+     :encoder-3 [(one-hot-encoder-3 evaluator 1 0 0 0)
+                 (one-hot-encoder-3 evaluator 0 1 0 0)
+                 (one-hot-encoder-3 evaluator 0 0 1 0)
+                 (one-hot-encoder-3 evaluator 0 0 0 1)
+                 (one-hot-encoder-3 evaluator 1 1 0 0)
+                 (one-hot-encoder-3 evaluator 0 0 0 0)]
+     :encoder-4 [(one-hot-encoder-4 evaluator 1 0 0 0)
+                 (one-hot-encoder-4 evaluator 0 1 0 0)
+                 (one-hot-encoder-4 evaluator 0 0 1 0)
+                 (one-hot-encoder-4 evaluator 0 0 0 1)
+                 (one-hot-encoder-4 evaluator 1 1 0 0)
+                 (one-hot-encoder-4 evaluator 0 0 0 0)]}))
 
-;; Test one-hot encoder on the abcd results themselves
-(let [last-combo (last associative-combinations)
-      evaluator (evaluator/make-evaluator (:and-candidate last-combo) 
-                                          (:or-candidate last-combo) 
-                                          not)
-      results (:results last-combo)]
-  ;; Apply both one-hot encoders to each abcd result vector
-  {:encoder-1-on-results (map (fn [abcd-result]
-                                (apply one-hot-encoder-1 evaluator abcd-result))
-                              results)
-   :encoder-2-on-results (map (fn [abcd-result]
-                                (apply one-hot-encoder-2 evaluator abcd-result))
-                              results)
-   :encoder-3-on-results (map (fn [abcd-result]
-                                (apply one-hot-encoder-3 evaluator abcd-result))
-                              results)
-   :encoder-4-on-results (map (fn [abcd-result]
-                                (apply one-hot-encoder-4 evaluator abcd-result))
-                              results)})
+(map-indexed (fn [idx combo]
+               {:combo-index idx
+                :results (:results combo)
+                :encoder-tests (test-encoders-on-combo combo)})
+             associative-combinations)
+
+;; Test one-hot encoders on the abcd results themselves for all combinations
+(defn test-encoders-on-abcd-results [combo]
+  (let [evaluator (evaluator/make-evaluator (:and-candidate combo)
+                                            (:or-candidate combo)
+                                            not)
+        results (:results combo)]
+    {:encoder-1-on-results (map (fn [abcd-result]
+                                  (apply one-hot-encoder-1 evaluator abcd-result))
+                                results)
+     :encoder-2-on-results (map (fn [abcd-result]
+                                  (apply one-hot-encoder-2 evaluator abcd-result))
+                                results)
+     :encoder-3-on-results (map (fn [abcd-result]
+                                  (apply one-hot-encoder-3 evaluator abcd-result))
+                                results)
+     :encoder-4-on-results (map (fn [abcd-result]
+                                  (apply one-hot-encoder-4 evaluator abcd-result))
+                                results)}))
+
+(map-indexed (fn [idx combo]
+               {:combo-index idx
+                :abcd-results (:results combo)
+                :encoder-tests-on-abcd (test-encoders-on-abcd-results combo)})
+             associative-combinations)
