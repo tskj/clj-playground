@@ -81,7 +81,7 @@ valid-combinations
       (n (r (nd a b) (nd a c) (nd a d)  ; no pairs are both true
             (nd b c) (nd b d) (nd c d)))))
 
-(defn one-hot-encoder-4 [{:keys [nd r n]} a b c d]
+(defn one-hot-encoder-3-2 [{:keys [nd r n]} a b c d]
   (nd (r a b c d)  ; at least one is true
       (n (r (nd a b) (nd a c) (nd a d)      ; no pairs are both true
             (nd b c) (nd b d) (nd c d)))
@@ -89,10 +89,32 @@ valid-combinations
             (nd a c d) (nd b c d)))
       (n (nd a b c d))))                    ; not all four are true
 
+(defn one-hot-encoder-4 [{:keys [nd r n]} a b c d]
+  (nd (r a b c d)          ; at least one is true
+      (n (nd a b))         ; not (a and b)
+      (n (nd a c))         ; not (a and c)
+      (n (nd a d))         ; not (a and d)
+      (n (nd b c))         ; not (b and c)
+      (n (nd b d))         ; not (b and d)
+      (n (nd c d))))       ; not (c and d)
+
+(defn is-zero [{:keys [nd r n]} x]
+  (r :b (n (nd :b x))))
+
+(defn is-true [{:keys [n] :as evaluator} x]
+  (is-zero evaluator (n x)))
+
+(defn one-hot-encoder-tetra [{:keys [nd r n] :as evaluator} a b c d]
+  (let [z? #(n (is-true evaluator %))  ; not-true
+        t? #(is-true evaluator %)]
+    (r (nd (t? a) (z? b) (z? c) (z? d))
+       (nd (z? a) (t? b) (z? c) (z? d))
+       (nd (z? a) (z? b) (t? c) (z? d))
+       (nd (z? a) (z? b) (z? c) (t? d)))))
+
 (->>
  associative-combinations
- last
- :results)
+ last)
 
 (defn test-encoders-on-combo [combo]
   (let [evaluator (evaluator/make-evaluator (:and-candidate combo)
@@ -116,6 +138,12 @@ valid-combinations
                  (one-hot-encoder-3 evaluator 0 0 0 1)
                  (one-hot-encoder-3 evaluator 1 1 0 0)
                  (one-hot-encoder-3 evaluator 0 0 0 0)]
+     :encoder-3-2 [(one-hot-encoder-3-2 evaluator 1 0 0 0)
+                   (one-hot-encoder-3-2 evaluator 0 1 0 0)
+                   (one-hot-encoder-3-2 evaluator 0 0 1 0)
+                   (one-hot-encoder-3-2 evaluator 0 0 0 1)
+                   (one-hot-encoder-3-2 evaluator 1 1 0 0)
+                   (one-hot-encoder-3-2 evaluator 0 0 0 0)]
      :encoder-4 [(one-hot-encoder-4 evaluator 1 0 0 0)
                  (one-hot-encoder-4 evaluator 0 1 0 0)
                  (one-hot-encoder-4 evaluator 0 0 1 0)
@@ -144,6 +172,9 @@ valid-combinations
      :encoder-3-on-results (map (fn [abcd-result]
                                   (apply one-hot-encoder-3 evaluator abcd-result))
                                 results)
+     :encoder-3-2-on-results (map (fn [abcd-result]
+                                    (apply one-hot-encoder-3-2 evaluator abcd-result))
+                                  results)
      :encoder-4-on-results (map (fn [abcd-result]
                                   (apply one-hot-encoder-4 evaluator abcd-result))
                                 results)}))
@@ -153,3 +184,55 @@ valid-combinations
                 :abcd-results (:results combo)
                 :encoder-tests-on-abcd (test-encoders-on-abcd-results combo)})
              associative-combinations)
+
+;; Test is-zero and is-true functions on all four associative combinations
+(defn test-is-zero-is-true [combo]
+  (let [evaluator (evaluator/make-evaluator (:and-candidate combo)
+                                            (:or-candidate combo)
+                                            not)
+        test-values [1 0 :p :b]]
+    {:is-zero-results (map #(is-zero evaluator %) test-values)
+     :is-true-results (map #(is-true evaluator %) test-values)}))
+
+(map-indexed (fn [idx combo]
+               {:combo-index idx
+                :tests (test-is-zero-is-true combo)})
+             associative-combinations)
+
+;; Test tetralogic one-hot encoder on the last system
+(let [last-combo (last associative-combinations)
+      evaluator (evaluator/make-evaluator (:and-candidate last-combo)
+                                          (:or-candidate last-combo)
+                                          not)
+      test-inputs [[1 0 0 0] [0 1 0 0] [0 0 1 0] [0 0 0 1]
+                   [:p :p 1 0] [:b :b 0 1] [:p :p 1 :p] [:b :b :b 1]]]
+  (map (fn [input]
+         {:input input
+          :tetra-encoder (apply one-hot-encoder-tetra evaluator input)})
+       test-inputs))
+
+;; Test all 256 combinations to verify one-hot encoder correctness
+(let [last-combo (last associative-combinations)
+      evaluator (evaluator/make-evaluator (:and-candidate last-combo)
+                                          (:or-candidate last-combo)
+                                          not)
+      all-values [0 1 :p :b]
+      all-combinations (for [a all-values b all-values c all-values d all-values]
+                         [a b c d])
+      results (map (fn [combo]
+                     {:input combo
+                      :tetra-result (apply one-hot-encoder-tetra evaluator combo)
+                      :expected-one-hot? (= 1 (count (filter #{1} combo)))})
+                   all-combinations)]
+  {:total-combinations (count results)
+   :one-hot-cases (filter :expected-one-hot? results)
+   :non-one-hot-cases (remove :expected-one-hot? results)
+   :correct-true-cases (count (filter #(and (:expected-one-hot? %)
+                                            (= 1 (:tetra-result %)))
+                                      results))
+   :correct-false-cases (count (filter #(and (not (:expected-one-hot? %))
+                                             (not= 1 (:tetra-result %)))
+                                       results))
+   :total-correct (count (filter #(= (:expected-one-hot? %)
+                                     (= 1 (:tetra-result %)))
+                                 results))})
