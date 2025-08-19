@@ -104,6 +104,14 @@ valid-combinations
 (defn is-true [{:keys [n] :as evaluator} x]
   (is-zero evaluator (n x)))
 
+(defn is-zero-alt [{:keys [nd r n]} x]
+  "Alternative is-zero for systems 0 & 1: not ((x or 0) and (x or 1))"
+  (n (nd (r x 0) (r x 1))))
+
+(defn is-true-alt [{:keys [nd r n] :as evaluator} x]
+  "Alternative is-true for systems 0 & 1: is-zero-alt(not(x))"
+  (is-zero-alt evaluator (n x)))
+
 (defn one-hot-encoder-tetra [{:keys [nd r n] :as evaluator} a b c d]
   (let [z? #(n (is-true evaluator %))  ; not-true
         t? #(is-true evaluator %)]
@@ -236,3 +244,17 @@ valid-combinations
    :total-correct (count (filter #(= (:expected-one-hot? %)
                                      (= 1 (:tetra-result %)))
                                  results))})
+
+;; Test alternative is-zero and is-true functions on systems 0 & 1
+(defn test-is-zero-alt-is-true-alt [combo]
+  (let [evaluator (evaluator/make-evaluator (:and-candidate combo)
+                                            (:or-candidate combo)
+                                            not)
+        test-values [1 0 :p :b]]
+    {:is-zero-alt-results (map #(is-zero-alt evaluator %) test-values)
+     :is-true-alt-results (map #(is-true-alt evaluator %) test-values)}))
+
+(map-indexed (fn [idx combo]
+               {:combo-index idx
+                :alt-tests (test-is-zero-alt-is-true-alt combo)})
+             (take 2 associative-combinations))
